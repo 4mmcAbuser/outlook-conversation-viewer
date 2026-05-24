@@ -1,100 +1,42 @@
 // Global Variables
 let rawConversationData = null;
-let rawXmlResponse = "";
+let rawJsonResponse = "";
 let isOfficeInitialized = false;
 
 // Mock Data for Browser Preview (Premium Developer Mode)
 const mockConversation = {
-    conversationId: "CONV_ID_MOCK_8d2f1f50-32df-4277-bc60-0a370e5b565d",
+    conversationId: "CONV_ID_MOCK_8d2f1f50",
     subject: "Re: Design Proposal - Premium Glassmorphism Theme",
     totalMessages: 3,
-    participants: ["Sarah Jenkins (Design Lead)", "Alex Rivera (Tech Lead)", "Emily Chen (Product Manager)"],
+    participants: ["Sarah Jenkins", "Alex Rivera", "Emily Chen"],
     timeframe: "May 24, 2026",
     messages: [
         {
-            messageId: "MSG_ID_1",
-            subject: "Design Proposal - Premium Glassmorphism Theme",
-            sender: {
-                name: "Sarah Jenkins",
-                email: "sarah.j@company.com"
-            },
-            dateTimeReceived: "2026-05-24T14:20:00Z",
-            bodySnippet: "Hi team, I've put together the visual concept for our new client interface. We are aiming for a rich glassmorphism aesthetic with tailored HSL variables, backdrop blur, and semi-transparent borders. Please review the attached mockup assets."
+            Subject: "Design Proposal - Premium Glassmorphism Theme",
+            From: { EmailAddress: { Name: "Sarah Jenkins", Address: "sarah.j@company.com" } },
+            ToRecipients: [{ EmailAddress: { Name: "Team", Address: "team@company.com" } }],
+            ReceivedDateTime: "2026-05-24T14:20:00Z",
+            BodyPreview: "Hi team, I've put together the visual concept for our new client interface. We are aiming for a rich glassmorphism aesthetic with tailored HSL variables, backdrop blur, and semi-transparent borders.",
+            HasAttachments: true
         },
         {
-            messageId: "MSG_ID_2",
-            subject: "Re: Design Proposal - Premium Glassmorphism Theme",
-            sender: {
-                name: "Alex Rivera",
-                email: "alex.r@company.com"
-            },
-            dateTimeReceived: "2026-05-24T15:05:00Z",
-            bodySnippet: "This looks stunning, Sarah! The micro-animations on hover and the dark mode gradients feel extremely premium. Performance-wise, we just need to ensure the backdrop-filter styles don't bottleneck mobile rendering. I'll create a sandbox mockup to test."
+            Subject: "Re: Design Proposal - Premium Glassmorphism Theme",
+            From: { EmailAddress: { Name: "Alex Rivera", Address: "alex.r@company.com" } },
+            ToRecipients: [{ EmailAddress: { Name: "Sarah Jenkins", Address: "sarah.j@company.com" } }],
+            ReceivedDateTime: "2026-05-24T15:05:00Z",
+            BodyPreview: "This looks stunning, Sarah! The micro-animations on hover and the dark mode gradients feel extremely premium. Performance-wise, we just need to ensure the backdrop-filter styles don't bottleneck mobile rendering.",
+            HasAttachments: false
         },
         {
-            messageId: "MSG_ID_3",
-            subject: "Re: Design Proposal - Premium Glassmorphism Theme",
-            sender: {
-                name: "Emily Chen",
-                email: "emily.c@company.com"
-            },
-            dateTimeReceived: "2026-05-24T15:30:00Z",
-            bodySnippet: "Incredible work, both of you. The client is going to be absolutely wowed. Let's lock in this design direction. Alex, let me know how the sandbox test goes so we can schedule the dev sprint."
+            Subject: "Re: Design Proposal - Premium Glassmorphism Theme",
+            From: { EmailAddress: { Name: "Emily Chen", Address: "emily.c@company.com" } },
+            ToRecipients: [{ EmailAddress: { Name: "Sarah Jenkins", Address: "sarah.j@company.com" } }, { EmailAddress: { Name: "Alex Rivera", Address: "alex.r@company.com" } }],
+            ReceivedDateTime: "2026-05-24T15:30:00Z",
+            BodyPreview: "Incredible work, both of you. The client is going to be absolutely wowed. Let's lock in this design direction. Alex, let me know how the sandbox test goes so we can schedule the dev sprint.",
+            HasAttachments: false
         }
     ]
 };
-
-const mockXmlResponse = `<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-  <s:Body>
-    <m:GetConversationItemsResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
-      <m:ResponseMessages>
-        <m:GetConversationItemsResponseMessage ResponseClass="Success">
-          <m:ResponseCode>NoError</m:ResponseCode>
-          <m:Conversation>
-            <t:ConversationId Id="CONV_ID_MOCK_8d2f1f50-32df-4277-bc60-0a370e5b565d"/>
-            <t:ConversationNodes>
-              <t:ConversationNode>
-                <t:InternetMessageId>&lt;sarah.j@company.com&gt;</t:InternetMessageId>
-                <t:Items>
-                  <t:Message>
-                    <t:ItemId Id="MSG_ID_1"/>
-                    <t:Subject>Design Proposal - Premium Glassmorphism Theme</t:Subject>
-                    <t:DateTimeReceived>2026-05-24T14:20:00Z</t:DateTimeReceived>
-                    <t:Sender>
-                      <t:Mailbox>
-                        <t:Name>Sarah Jenkins</t:Name>
-                        <t:EmailAddress>sarah.j@company.com</t:EmailAddress>
-                      </t:Mailbox>
-                    </t:Sender>
-                    <t:Body BodyType="Text">Hi team, I've put together the visual concept for our new client interface. We are aiming for a rich glassmorphism aesthetic with tailored HSL variables, backdrop blur, and semi-transparent borders. Please review the attached mockup assets.</t:Body>
-                  </t:Message>
-                </t:Items>
-              </t:ConversationNode>
-              <t:ConversationNode>
-                <t:InternetMessageId>&lt;alex.r@company.com&gt;</t:InternetMessageId>
-                <t:Items>
-                  <t:Message>
-                    <t:ItemId Id="MSG_ID_2"/>
-                    <t:Subject>Re: Design Proposal - Premium Glassmorphism Theme</t:Subject>
-                    <t:DateTimeReceived>2026-05-24T15:05:00Z</t:DateTimeReceived>
-                    <t:Sender>
-                      <t:Mailbox>
-                        <t:Name>Alex Rivera</t:Name>
-                        <t:EmailAddress>alex.r@company.com</t:EmailAddress>
-                      </t:Mailbox>
-                    </t:Sender>
-                    <t:Body BodyType="Text">This looks stunning, Sarah! The micro-animations on hover and the dark mode gradients feel extremely premium. Performance-wise, we just need to ensure the backdrop-filter styles don't bottleneck mobile rendering. I'll create a sandbox mockup to test.</t:Body>
-                  </t:Message>
-                </t:Items>
-              </t:ConversationNode>
-            </t:ConversationNodes>
-          </m:Conversation>
-        </m:GetConversationItemsResponseMessage>
-      </m:ResponseMessages>
-    </m:GetConversationItemsResponse>
-  </s:Body>
-</s:Envelope>`;
 
 // Office Init
 Office.onReady((info) => {
@@ -106,7 +48,6 @@ Office.onReady((info) => {
         statusBadge.className = "status-badge connected";
         initializeAddIn();
     } else {
-        // Outside Outlook (e.g. general web browser preview)
         statusBadge.textContent = "Preview Mode";
         statusBadge.className = "status-badge connected";
         loadMockData();
@@ -136,7 +77,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Action buttons
     document.getElementById("btn-copy-json").addEventListener("click", copyJsonToClipboard);
     document.getElementById("btn-download-json").addEventListener("click", downloadJsonFile);
-    document.getElementById("btn-copy-xml").addEventListener("click", copyXmlToClipboard);
+    document.getElementById("btn-copy-xml").addEventListener("click", copyRawToClipboard);
     document.getElementById("btn-collapse-all").addEventListener("click", () => renderJsonView(rawConversationData, false));
     document.getElementById("btn-expand-all").addEventListener("click", () => renderJsonView(rawConversationData, true));
     
@@ -168,196 +109,105 @@ function initializeAddIn() {
             return;
         }
 
-        fetchConversationHistory(conversationId);
+        fetchConversationViaREST();
     } catch (e) {
         showError(`Initialization error: ${e.message}`);
     }
 }
 
-// Fetch via EWS SOAP
-function fetchConversationHistory(conversationId) {
+// ============================================================
+// REST API Engine (replaces legacy EWS SOAP)
+// Works on ALL accounts including free Outlook.com
+// ============================================================
+function fetchConversationViaREST() {
     const progressBar = document.getElementById("progress-bar");
-    progressBar.style.width = "40%";
+    progressBar.style.width = "30%";
 
-    const soapRequest = `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header>
-    <t:RequestServerVersion Version="Exchange2013" />
-  </soap:Header>
-  <soap:Body>
-    <m:GetConversationItems>
-      <m:ItemShape>
-        <t:BaseShape>Default</t:BaseShape>
-        <t:AdditionalProperties>
-          <t:FieldURI FieldURI="item:Subject" />
-          <t:FieldURI FieldURI="item:DateTimeReceived" />
-          <t:FieldURI FieldURI="message:Sender" />
-          <t:FieldURI FieldURI="item:Body" />
-        </t:AdditionalProperties>
-      </m:ItemShape>
-      <m:Conversations>
-        <t:ConversationRequest>
-          <t:ConversationId Id="${conversationId}" />
-        </t:ConversationRequest>
-      </m:Conversations>
-    </m:GetConversationItems>
-  </soap:Body>
-</soap:Envelope>`;
+    // Step 1: Get a REST callback token
+    Office.context.mailbox.getCallbackTokenAsync({ isRest: true }, function (result) {
+        progressBar.style.width = "50%";
 
-    progressBar.style.width = "70%";
-
-    Office.context.mailbox.makeEwsRequestAsync(soapRequest, (asyncResult) => {
-        progressBar.style.width = "100%";
-        
-        if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
-            rawXmlResponse = asyncResult.value;
-            parseEwsSoapResponse(rawXmlResponse);
-        } else {
-            showError(`Exchange Server SOAP Call failed: ${asyncResult.error.message}`);
+        if (result.status !== "succeeded") {
+            showError("Authentication failed: " + (result.error ? result.error.message : "Could not obtain REST token."));
+            return;
         }
+
+        const accessToken = result.value;
+        const restUrl = Office.context.mailbox.restUrl;
+        const conversationId = Office.context.mailbox.item.conversationId;
+
+        progressBar.style.width = "70%";
+
+        // Step 2: Query the REST API for all messages in this conversation
+        const apiUrl = `${restUrl}/api/v2.0/me/messages?$filter=ConversationId eq '${conversationId}'&$orderby=ReceivedDateTime asc&$select=Subject,From,ToRecipients,ReceivedDateTime,BodyPreview,HasAttachments&$top=50`;
+
+        fetch(apiUrl, {
+            method: "GET",
+            headers: {
+                "Authorization": "Bearer " + accessToken,
+                "Accept": "application/json"
+            }
+        })
+        .then(response => {
+            progressBar.style.width = "90%";
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            progressBar.style.width = "100%";
+            const messages = data.value || [];
+            
+            if (messages.length === 0) {
+                showError("No messages found in this conversation thread.");
+                return;
+            }
+
+            // Store the raw JSON response
+            rawJsonResponse = JSON.stringify(data, null, 2);
+
+            // Build the structured conversation object
+            const participantsSet = new Set();
+            messages.forEach(msg => {
+                if (msg.From && msg.From.EmailAddress) {
+                    participantsSet.add(msg.From.EmailAddress.Name || msg.From.EmailAddress.Address);
+                }
+                if (msg.ToRecipients) {
+                    msg.ToRecipients.forEach(r => {
+                        if (r.EmailAddress) {
+                            participantsSet.add(r.EmailAddress.Name || r.EmailAddress.Address);
+                        }
+                    });
+                }
+            });
+
+            rawConversationData = {
+                conversationId: conversationId,
+                subject: Office.context.mailbox.item.subject || messages[0].Subject || "No Subject",
+                totalMessages: messages.length,
+                participants: Array.from(participantsSet),
+                timeframe: getFormattedTimeframe(messages.map(m => m.ReceivedDateTime)),
+                messages: messages
+            };
+
+            renderDashboard(rawConversationData, rawJsonResponse);
+        })
+        .catch(error => {
+            showError("REST API Error: " + error.message);
+        });
     });
 }
 
-// Parse EWS XML response
-function parseEwsSoapResponse(xmlString) {
-    try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-        
-        // Check for SOAP faults
-        const faultNode = xmlDoc.getElementsByTagNameNS("http://schemas.xmlsoap.org/soap/envelope/", "Fault")[0] ||
-                          xmlDoc.getElementsByTagName("soap:Fault")[0] ||
-                          xmlDoc.getElementsByTagName("Fault")[0];
-        if (faultNode) {
-            const faultString = faultNode.getElementsByTagName("faultstring")[0]?.textContent || "EWS SOAP Fault occurred.";
-            showError(faultString);
-            return;
-        }
-
-        // Get conversation nodes
-        const conversationNodes = xmlDoc.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", "ConversationNode") ||
-                                  xmlDoc.getElementsByTagName("t:ConversationNode") ||
-                                  xmlDoc.getElementsByTagName("ConversationNode");
-
-        if (conversationNodes.length === 0) {
-            showError("No conversation history node structure found in response.");
-            return;
-        }
-
-        const messages = [];
-        const participantsSet = new Set();
-        let mainSubject = "";
-
-        // Iterate through EWS nodes
-        for (let i = 0; i < conversationNodes.length; i++) {
-            const node = conversationNodes[i];
-            const itemNodes = node.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", "Message") ||
-                              node.getElementsByTagName("t:Message") ||
-                              node.getElementsByTagName("Message");
-
-            for (let j = 0; j < itemNodes.length; j++) {
-                const item = itemNodes[j];
-                
-                const itemId = getXmlNodeValue(item, "ItemId", "Id");
-                const subject = getXmlNodeText(item, "Subject");
-                const dateTimeReceived = getXmlNodeText(item, "DateTimeReceived");
-                
-                // Get Sender Info
-                let senderName = "Unknown";
-                let senderEmail = "unknown@domain.com";
-                const senderNode = item.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", "Sender")[0] ||
-                                   item.getElementsByTagName("t:Sender")[0] ||
-                                   item.getElementsByTagName("Sender")[0];
-                if (senderNode) {
-                    senderName = getXmlNodeText(senderNode, "Name");
-                    senderEmail = getXmlNodeText(senderNode, "EmailAddress");
-                }
-                
-                if (senderName && senderName !== "Unknown") {
-                    participantsSet.add(`${senderName} (${senderEmail})`);
-                }
-
-                // Get body content
-                let bodySnippet = getXmlNodeText(item, "Body");
-                if (bodySnippet && bodySnippet.length > 500) {
-                    bodySnippet = bodySnippet.substring(0, 500) + "...";
-                }
-
-                if (!mainSubject && subject) {
-                    mainSubject = subject;
-                }
-
-                messages.push({
-                    messageId: itemId || `MSG_${messages.length + 1}`,
-                    subject: subject || "No Subject",
-                    sender: {
-                        name: senderName,
-                        email: senderEmail
-                    },
-                    dateTimeReceived: dateTimeReceived || new Date().toISOString(),
-                    bodySnippet: bodySnippet || ""
-                });
-            }
-        }
-
-        // Sort chronological
-        messages.sort((a, b) => new Date(a.dateTimeReceived) - new Date(b.dateTimeReceived));
-
-        rawConversationData = {
-            conversationId: Office.context.mailbox.item.conversationId,
-            subject: mainSubject || Office.context.mailbox.item.subject || "Subject Unavailable",
-            totalMessages: messages.length,
-            participants: Array.from(participantsSet),
-            timeframe: getFormattedTimeframe(messages),
-            messages: messages
-        };
-
-        renderDashboard(rawConversationData, xmlString);
-    } catch (e) {
-        showError(`Parsing XML response failed: ${e.message}`);
-    }
-}
-
-// Utility to get XML text content handling namespaces
-function getXmlNodeText(parentNode, localName) {
-    const nodes = parentNode.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", localName);
-    if (nodes.length > 0) return nodes[0].textContent;
-    
-    const prefNodes = parentNode.getElementsByTagName(`t:${localName}`);
-    if (prefNodes.length > 0) return prefNodes[0].textContent;
-    
-    const plainNodes = parentNode.getElementsByTagName(localName);
-    if (plainNodes.length > 0) return plainNodes[0].textContent;
-    
-    return "";
-}
-
-// Utility to get XML attributes handling namespaces
-function getXmlNodeValue(parentNode, localName, attributeName) {
-    const nodes = parentNode.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", localName);
-    if (nodes.length > 0) return nodes[0].getAttribute(attributeName);
-    
-    const prefNodes = parentNode.getElementsByTagName(`t:${localName}`);
-    if (prefNodes.length > 0) return prefNodes[0].getAttribute(attributeName);
-    
-    const plainNodes = parentNode.getElementsByTagName(localName);
-    if (plainNodes.length > 0) return plainNodes[0].getAttribute(attributeName);
-    
-    return "";
-}
-
 // Helper to format conversation timeframe
-function getFormattedTimeframe(messages) {
-    if (messages.length === 0) return "";
-    if (messages.length === 1) {
-        return formatDate(messages[0].dateTimeReceived);
-    }
-    const firstDate = formatDate(messages[0].dateTimeReceived);
-    const lastDate = formatDate(messages[messages.length - 1].dateTimeReceived);
-    return `${firstDate} - ${lastDate}`;
+function getFormattedTimeframe(dates) {
+    if (!dates || dates.length === 0) return "";
+    const validDates = dates.filter(d => d);
+    if (validDates.length === 0) return "";
+    if (validDates.length === 1) return formatDate(validDates[0]);
+    return `${formatDate(validDates[0])} - ${formatDate(validDates[validDates.length - 1])}`;
 }
 
 function formatDate(dateString) {
@@ -370,7 +220,7 @@ function formatDate(dateString) {
 }
 
 // Show details on Dashboard
-function renderDashboard(data, xmlResponse = "") {
+function renderDashboard(data, jsonResponse) {
     document.getElementById("loader").classList.add("hidden");
     document.getElementById("error-panel").classList.add("hidden");
     
@@ -388,8 +238,8 @@ function renderDashboard(data, xmlResponse = "") {
     // Render JSON Tree View
     renderJsonView(data, true);
 
-    // Populate Raw XML debug view
-    document.getElementById("xml-output").textContent = xmlResponse || "XML schema unavailable in Preview Mode.";
+    // Populate Raw JSON response view
+    document.getElementById("xml-output").textContent = jsonResponse || "No raw response available.";
 }
 
 // Renders the visual Timeline tab
@@ -402,18 +252,26 @@ function renderTimelineView(messages) {
         item.className = "timeline-item";
         item.style.animationDelay = `${index * 0.1}s`;
 
-        const d = new Date(msg.dateTimeReceived);
-        const dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " + 
-                      d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+        const dateStr = msg.ReceivedDateTime ? (() => {
+            const d = new Date(msg.ReceivedDateTime);
+            return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " + 
+                   d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+        })() : "Unknown date";
+
+        const senderName = msg.From && msg.From.EmailAddress 
+            ? (msg.From.EmailAddress.Name || msg.From.EmailAddress.Address) 
+            : "Unknown";
+
+        const attachmentBadge = msg.HasAttachments ? ' 📎' : '';
 
         item.innerHTML = `
             <div class="timeline-marker"></div>
             <div class="timeline-content">
                 <div class="timeline-header">
-                    <span class="sender-name">${escapeHtml(msg.sender.name || msg.sender.email)}</span>
+                    <span class="sender-name">${escapeHtml(senderName)}${attachmentBadge}</span>
                     <span class="date-text">${dateStr}</span>
                 </div>
-                <div class="snippet-text">${escapeHtml(msg.bodySnippet || "No content summary available.")}</div>
+                <div class="snippet-text">${escapeHtml(msg.BodyPreview || "No content preview available.")}</div>
             </div>
         `;
         timelineList.appendChild(item);
@@ -425,14 +283,14 @@ function renderJsonView(obj, defaultExpanded = true) {
     const jsonOutput = document.getElementById("json-output");
     jsonOutput.innerHTML = "";
     
-    const html = formatJsonHtml(obj, defaultExpanded);
+    const html = formatJsonHtml(obj, defaultExpanded, 0);
     jsonOutput.appendChild(html);
 }
 
-function formatJsonHtml(val, expanded) {
+function formatJsonHtml(val, expanded, depth) {
     const container = document.createElement("div");
     
-    if (val === null) {
+    if (val === null || val === undefined) {
         const span = document.createElement("span");
         span.className = "json-null";
         span.textContent = "null";
@@ -458,17 +316,18 @@ function formatJsonHtml(val, expanded) {
             return container;
         }
 
+        const shouldExpand = expanded && depth < 3;
         const block = document.createElement("span");
         const openBracket = document.createElement("span");
         openBracket.className = "collapsible-trigger";
-        openBracket.textContent = expanded ? "[" : "[ ... ]";
+        openBracket.textContent = shouldExpand ? "[" : `[ ...${val.length} items ]`;
         
         const closeBracket = document.createElement("span");
         closeBracket.textContent = "]";
         
         const contents = document.createElement("div");
         contents.className = "json-node";
-        if (!expanded) contents.style.display = "none";
+        if (!shouldExpand) contents.style.display = "none";
 
         openBracket.onclick = () => {
             if (contents.style.display === "none") {
@@ -476,13 +335,13 @@ function formatJsonHtml(val, expanded) {
                 openBracket.textContent = "[";
             } else {
                 contents.style.display = "none";
-                openBracket.textContent = "[ ... ]";
+                openBracket.textContent = `[ ...${val.length} items ]`;
             }
         };
 
         val.forEach((item, index) => {
             const itemDiv = document.createElement("div");
-            itemDiv.appendChild(formatJsonHtml(item, expanded));
+            itemDiv.appendChild(formatJsonHtml(item, expanded, depth + 1));
             if (index < val.length - 1) {
                 itemDiv.appendChild(document.createTextNode(","));
             }
@@ -500,17 +359,18 @@ function formatJsonHtml(val, expanded) {
             return container;
         }
 
+        const shouldExpand = expanded && depth < 3;
         const block = document.createElement("span");
         const openBrace = document.createElement("span");
         openBrace.className = "collapsible-trigger";
-        openBrace.textContent = expanded ? "{" : "{ ... }";
+        openBrace.textContent = shouldExpand ? "{" : "{ ... }";
         
         const closeBrace = document.createElement("span");
         closeBrace.textContent = "}";
         
         const contents = document.createElement("div");
         contents.className = "json-node";
-        if (!expanded) contents.style.display = "none";
+        if (!shouldExpand) contents.style.display = "none";
 
         openBrace.onclick = () => {
             if (contents.style.display === "none") {
@@ -530,7 +390,7 @@ function formatJsonHtml(val, expanded) {
             
             rowDiv.appendChild(keySpan);
             rowDiv.appendChild(document.createTextNode(": "));
-            rowDiv.appendChild(formatJsonHtml(val[key], expanded));
+            rowDiv.appendChild(formatJsonHtml(val[key], expanded, depth + 1));
             if (index < keys.length - 1) {
                 rowDiv.appendChild(document.createTextNode(","));
             }
@@ -567,13 +427,13 @@ function copyJsonToClipboard() {
     });
 }
 
-function copyXmlToClipboard() {
-    if (!rawXmlResponse) return;
-    navigator.clipboard.writeText(rawXmlResponse).then(() => {
+function copyRawToClipboard() {
+    if (!rawJsonResponse) return;
+    navigator.clipboard.writeText(rawJsonResponse).then(() => {
         const btn = document.getElementById("btn-copy-xml");
         btn.textContent = "Copied ✓";
         setTimeout(() => {
-            btn.textContent = "Copy XML";
+            btn.textContent = "Copy Raw";
         }, 2200);
     });
 }
@@ -587,7 +447,7 @@ function downloadJsonFile() {
     
     const a = document.createElement("a");
     a.href = url;
-    a.download = `outlook-conversation-${rawConversationData.conversationId || "thread"}.json`;
+    a.download = `conversation-${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     
@@ -623,9 +483,16 @@ function escapeHtml(str) {
 
 // Load Mock Data (Preview Mode outside Outlook)
 function loadMockData() {
-    rawConversationData = mockConversation;
-    rawXmlResponse = mockXmlResponse;
-    renderDashboard(rawConversationData, rawXmlResponse);
+    rawConversationData = {
+        conversationId: mockConversation.conversationId,
+        subject: mockConversation.subject,
+        totalMessages: mockConversation.totalMessages,
+        participants: mockConversation.participants,
+        timeframe: mockConversation.timeframe,
+        messages: mockConversation.messages
+    };
+    rawJsonResponse = JSON.stringify(mockConversation, null, 2);
+    renderDashboard(rawConversationData, rawJsonResponse);
 }
 
 // Load and display source code
@@ -643,8 +510,7 @@ function loadSourceCode() {
             output.textContent = text;
         })
         .catch(err => {
-            output.textContent = "Error loading " + file + ": " + err.message + 
-                               "\n\n(If you are running in sideloaded mode, ensure that the files are served over HTTPS from your secure local or GitHub Pages server).";
+            output.textContent = "Error loading " + file + ": " + err.message;
         });
 }
 
