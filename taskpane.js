@@ -103,8 +103,14 @@ function initializeAddIn() {
             return;
         }
 
-        // Try local client-side thread parsing first (works universally, zero permissions/network)
-        fetchConversationViaClientBody();
+        const conversationId = item.conversationId;
+        if (!conversationId) {
+            showError("Could not retrieve conversation ID for this message.");
+            return;
+        }
+
+        // Try EWS SOAP first with EWS-converted ID (retrieves full DB thread)
+        fetchConversationViaEWS(conversationId);
     } catch (e) {
         showError(`Initialization error: ${e.message}`);
     }
@@ -526,9 +532,23 @@ function copySourceCodeToClipboard() {
 // ============================================================
 // EWS SOAP Engine (corrected schema, works universally)
 // ============================================================
-function fetchConversationViaEWS(conversationId) {
+function fetchConversationViaEWS(restConversationId) {
     const progressBar = document.getElementById("progress-bar");
     progressBar.style.width = "25%";
+
+    // Convert modern REST format ID to classic EWS format required by SOAP EWS
+    let ewsConversationId = restConversationId;
+    try {
+        if (Office.context.mailbox.convertToEwsId) {
+            ewsConversationId = Office.context.mailbox.convertToEwsId(
+                restConversationId,
+                Office.MailboxEnums.RestVersion.v2_0
+            );
+            console.log("Successfully converted REST ConversationId to EWS format:", ewsConversationId);
+        }
+    } catch (err) {
+        console.warn("Failed to convert ConversationId to EWS format:", err.message);
+    }
 
     const soapRequest = `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -551,7 +571,7 @@ function fetchConversationViaEWS(conversationId) {
       </m:ItemShape>
       <m:ItemRequests>
         <t:ConversationRequest>
-          <t:ConversationId Id="${conversationId}" />
+          <t:ConversationId Id="${ewsConversationId}" />
         </t:ConversationRequest>
       </m:ItemRequests>
     </m:GetConversationItems>
@@ -566,13 +586,13 @@ function fetchConversationViaEWS(conversationId) {
                 progressBar.style.width = "85%";
                 parseEwsSoapResponse(asyncResult.value);
             } else {
-                console.warn("EWS SOAP Call failed: " + (asyncResult.error ? asyncResult.error.message : "unknown") + ". Falling back to REST API.");
-                fetchConversationViaREST();
+                console.warn("EWS SOAP Call failed: " + (asyncResult.error ? asyncResult.error.message : "unknown") + ". Falling back to client-side body parser.");
+                fetchConversationViaClientBody();
             }
         });
     } catch (err) {
-        console.warn("EWS invocation threw error: " + err.message + ". Falling back to REST API.");
-        fetchConversationViaREST();
+        console.warn("EWS invocation threw error: " + err.message + ". Falling back to client-side body parser.");
+        fetchConversationViaClientBody();
     }
 }
 
@@ -587,8 +607,8 @@ function parseEwsSoapResponse(xmlString) {
                           xmlDoc.getElementsByTagName("Fault")[0];
         if (faultNode) {
             const faultString = faultNode.getElementsByTagName("faultstring")[0]?.textContent || "EWS SOAP Fault occurred.";
-            console.warn("EWS Fault: " + faultString + ". Falling back to REST API.");
-            fetchConversationViaREST();
+            console.warn("EWS Fault: " + faultString + ". Falling back to client-side body parser.");
+            fetchConversationViaClientBody();
             return;
         }
 
@@ -598,8 +618,8 @@ function parseEwsSoapResponse(xmlString) {
                                   xmlDoc.getElementsByTagName("ConversationNode");
 
         if (conversationNodes.length === 0) {
-            console.warn("No conversation history node structure found in EWS response. Falling back to REST API.");
-            fetchConversationViaREST();
+            console.warn("No conversation history node structure found in EWS response. Falling back to client-side body parser.");
+            fetchConversationViaClientBody();
             return;
         }
 
@@ -685,8 +705,8 @@ function parseEwsSoapResponse(xmlString) {
 
         renderDashboard(rawConversationData, xmlString);
     } catch (e) {
-        console.warn("Parsing XML response failed: " + e.message + ". Falling back to REST API.");
-        fetchConversationViaREST();
+        console.warn("Parsing XML response failed: " + e.message + ". Falling back to client-side body parser.");
+        fetchConversationViaClientBody();
     }
 }
 
@@ -740,17 +760,17 @@ function fetchConversationViaClientBody() {
                     rawJsonResponse = JSON.stringify(parsedData, null, 2);
                     renderDashboard(rawConversationData, result.value);
                 } catch (parseErr) {
-                    console.warn("Client thread parsing failed: " + parseErr.message + ". Falling back to EWS SOAP.");
-                    fetchConversationViaEWS(item.conversationId);
+                    console.warn("Client thread parsing failed: " + parseErr.message + ". Falling back to REST API.");
+                    fetchConversationViaREST();
                 }
             } else {
-                console.warn("Client body retrieval failed. Falling back to EWS SOAP.");
-                fetchConversationViaEWS(item.conversationId);
+                console.warn("Client body retrieval failed. Falling back to REST API.");
+                fetchConversationViaREST();
             }
         });
     } catch (err) {
-        console.warn("Client body retrieval threw error: " + err.message + ". Falling back to EWS SOAP.");
-        fetchConversationViaEWS(Office.context.mailbox.item.conversationId);
+        console.warn("Client body retrieval threw error: " + err.message + ". Falling back to REST API.");
+        fetchConversationViaREST();
     }
 }
 
@@ -857,18 +877,57 @@ function findHeaderBlocks(text) {
     const lines = text.split(/\r?\n/);
     const blocks = [];
     
-    // Multilingual regular expressions for email header tags
+    // Multilingual regular expressions for email header tags (multi-line blocks)
     const fromRegex = /^(?:From|Από|De|Von|Da|Απο):\s*(.+)$/i;
     const sentRegex = /^(?:Sent|Στάλθηκε|Date|Datum|Σταλθηκε|Envoyé|Gesendet|Enviado|Inviato):\s*(.+)$/i;
     const toRegex = /^(?:To|Προς|À|An|Para|A):\s*(.+)$/i;
     const subjectRegex = /^(?:Subject|Θέμα|Objet|Betreff|Asunto|Oggetto|Θεμα):\s*(.+)$/i;
 
+    // Multilingual regex for single-line separators (e.g., "On [Date], [Name] wrote:" or Greek equivalent)
+    const singleLineRegex = /^(?:On|Στις|Le|Am|El|Da)\s+(.+?)\s+(?:wrote|έγραψε|a écrit|schrieb|escribió|ha scritto|ο χρήστης|ο\/η|user)(?:\s+(?:χρήστης|user))?\s+(.+?)(?:\s*(?:wrote|έγραψε|a écrit|schrieb|escribió|ha scritto))?\s*:?\s*$/i;
+
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        const fromMatch = line.match(fromRegex);
+        // Clean leading quote markers (> or spaces) commonly found in quoted email replies
+        const lineClean = line.replace(/^[>\s]+/, "").trim();
         
+        // 1. Check for single-line separator first
+        const singleLineMatch = lineClean.match(singleLineRegex);
+        if (singleLineMatch) {
+            let sentStr = singleLineMatch[1].trim();
+            let senderStr = singleLineMatch[2].trim();
+            
+            // Extract email from senderStr, e.g. "Yiannis xr <yiannisxr@outlook.com>"
+            let senderName = senderStr;
+            let senderEmail = "";
+            const emailMatch = senderStr.match(/([^<]+)?(?:<([^>]+)>)?/);
+            if (emailMatch) {
+                senderName = (emailMatch[1] || "").trim();
+                senderEmail = (emailMatch[2] || "").trim();
+            }
+            
+            let charIndex = 0;
+            for (let k = 0; k < i; k++) {
+                charIndex += lines[k].length + 1; // +1 for the newline character
+            }
+            
+            blocks.push({
+                lineIndex: i,
+                charIndex: charIndex,
+                length: lines[i].length + 1,
+                senderName: senderName || senderStr,
+                senderEmail: senderEmail,
+                sentDateStr: sentStr,
+                toRecipientsStr: "",
+                subjectStr: ""
+            });
+            
+            continue;
+        }
+
+        // 2. Check for multi-line block From match
+        const fromMatch = lineClean.match(fromRegex);
         if (fromMatch) {
-            // We found a potential "From" line. Look at the next 6 lines to verify Sent, To, or Subject
             let sentStr = "";
             let toStr = "";
             let subjectStr = "";
@@ -876,16 +935,16 @@ function findHeaderBlocks(text) {
             
             for (let j = 1; j <= 6; j++) {
                 if (i + j >= lines.length) break;
-                const nextLine = lines[i + j].trim();
+                const nextLineClean = lines[i + j].trim().replace(/^[>\s]+/, "").trim();
                 
-                if (nextLine.match(sentRegex)) {
-                    sentStr = nextLine.match(sentRegex)[1];
+                if (nextLineClean.match(sentRegex)) {
+                    sentStr = nextLineClean.match(sentRegex)[1];
                     headerLinesCount = Math.max(headerLinesCount, j + 1);
-                } else if (nextLine.match(toRegex)) {
-                    toStr = nextLine.match(toRegex)[1];
+                } else if (nextLineClean.match(toRegex)) {
+                    toStr = nextLineClean.match(toRegex)[1];
                     headerLinesCount = Math.max(headerLinesCount, j + 1);
-                } else if (nextLine.match(subjectRegex)) {
-                    subjectStr = nextLine.match(subjectRegex)[1];
+                } else if (nextLineClean.match(subjectRegex)) {
+                    subjectStr = nextLineClean.match(subjectRegex)[1];
                     headerLinesCount = Math.max(headerLinesCount, j + 1);
                 }
             }
@@ -894,7 +953,7 @@ function findHeaderBlocks(text) {
             if (sentStr || toStr || subjectStr) {
                 let charIndex = 0;
                 for (let k = 0; k < i; k++) {
-                    charIndex += lines[k].length + 1; // +1 for the newline character
+                    charIndex += lines[k].length + 1;
                 }
                 
                 let blockLength = 0;
