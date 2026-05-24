@@ -6,7 +6,7 @@
   xsi:type="MailApp">
 
   <Id>8d2f1f50-32df-4277-bc60-0a370e5b565d</Id>
-  <Version>1.0.0.1</Version>
+  <Version>1.0.0.2</Version>
   <ProviderName>Conversation Viewer Team</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Conversation JSON Viewer" />
@@ -24,7 +24,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/taskpane.html"/>
+        <SourceLocation DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/taskpane.html?v=2.0.1"/>
         <RequestedHeight>450</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -81,7 +81,7 @@
         <bt:Image id="icon80" DefaultValue="https://raw.githubusercontent.com/4mmcAbuser/outlook-conversation-viewer/main/assets/icon-80.png" />
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="messageReadTaskPaneUrl" DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/taskpane.html"/>
+        <bt:Url id="messageReadTaskPaneUrl" DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/taskpane.html?v=2.0.1"/>
         <bt:Url id="Commands.Url" DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/commands.html"/>
       </bt:Urls>
       <bt:ShortStrings>
