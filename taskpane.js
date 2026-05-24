@@ -109,7 +109,8 @@ function initializeAddIn() {
             return;
         }
 
-        fetchConversationViaREST();
+        // Try EWS SOAP first (corrected schema), fall back to REST if it fails
+        fetchConversationViaEWS(conversationId);
     } catch (e) {
         showError(`Initialization error: ${e.message}`);
     }
@@ -526,4 +527,199 @@ function copySourceCodeToClipboard() {
             btn.textContent = "Copy Code";
         }, 2200);
     });
+}
+
+// ============================================================
+// EWS SOAP Engine (corrected schema, works universally)
+// ============================================================
+function fetchConversationViaEWS(conversationId) {
+    const progressBar = document.getElementById("progress-bar");
+    progressBar.style.width = "25%";
+
+    const soapRequest = `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header>
+    <t:RequestServerVersion Version="Exchange2013" />
+  </soap:Header>
+  <soap:Body>
+    <m:GetConversationItems>
+      <m:ItemShape>
+        <t:BaseShape>Default</t:BaseShape>
+        <t:AdditionalProperties>
+          <t:FieldURI FieldURI="item:Subject" />
+          <t:FieldURI FieldURI="item:DateTimeReceived" />
+          <t:FieldURI FieldURI="message:Sender" />
+          <t:FieldURI FieldURI="item:Body" />
+        </t:AdditionalProperties>
+      </m:ItemShape>
+      <m:ItemRequests>
+        <t:ConversationRequest>
+          <t:ConversationId Id="${conversationId}" />
+        </t:ConversationRequest>
+      </m:ItemRequests>
+    </m:GetConversationItems>
+  </soap:Body>
+</soap:Envelope>`;
+
+    progressBar.style.width = "45%";
+
+    try {
+        Office.context.mailbox.makeEwsRequestAsync(soapRequest, (asyncResult) => {
+            if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+                progressBar.style.width = "85%";
+                parseEwsSoapResponse(asyncResult.value);
+            } else {
+                console.warn("EWS SOAP Call failed: " + (asyncResult.error ? asyncResult.error.message : "unknown") + ". Falling back to REST API.");
+                fetchConversationViaREST();
+            }
+        });
+    } catch (err) {
+        console.warn("EWS invocation threw error: " + err.message + ". Falling back to REST API.");
+        fetchConversationViaREST();
+    }
+}
+
+function parseEwsSoapResponse(xmlString) {
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+        
+        // Check for SOAP faults
+        const faultNode = xmlDoc.getElementsByTagNameNS("http://schemas.xmlsoap.org/soap/envelope/", "Fault")[0] ||
+                          xmlDoc.getElementsByTagName("soap:Fault")[0] ||
+                          xmlDoc.getElementsByTagName("Fault")[0];
+        if (faultNode) {
+            const faultString = faultNode.getElementsByTagName("faultstring")[0]?.textContent || "EWS SOAP Fault occurred.";
+            console.warn("EWS Fault: " + faultString + ". Falling back to REST API.");
+            fetchConversationViaREST();
+            return;
+        }
+
+        // Get conversation nodes
+        const conversationNodes = xmlDoc.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", "ConversationNode") ||
+                                  xmlDoc.getElementsByTagName("t:ConversationNode") ||
+                                  xmlDoc.getElementsByTagName("ConversationNode");
+
+        if (conversationNodes.length === 0) {
+            console.warn("No conversation history node structure found in EWS response. Falling back to REST API.");
+            fetchConversationViaREST();
+            return;
+        }
+
+        const messages = [];
+        const participantsSet = new Set();
+        let mainSubject = "";
+
+        // Iterate through EWS nodes
+        for (let i = 0; i < conversationNodes.length; i++) {
+            const node = conversationNodes[i];
+            const itemNodes = node.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", "Message") ||
+                              node.getElementsByTagName("t:Message") ||
+                              node.getElementsByTagName("Message");
+
+            for (let j = 0; j < itemNodes.length; j++) {
+                const item = itemNodes[j];
+                
+                const itemId = getXmlNodeValue(item, "ItemId", "Id");
+                const subject = getXmlNodeText(item, "Subject");
+                const dateTimeReceived = getXmlNodeText(item, "DateTimeReceived");
+                
+                // Get Sender Info
+                let senderName = "Unknown";
+                let senderEmail = "unknown@domain.com";
+                const senderNode = item.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", "Sender")[0] ||
+                                   item.getElementsByTagName("t:Sender")[0] ||
+                                   item.getElementsByTagName("Sender")[0];
+                if (senderNode) {
+                    senderName = getXmlNodeText(senderNode, "Name");
+                    senderEmail = getXmlNodeText(senderNode, "EmailAddress");
+                }
+                
+                if (senderName && senderName !== "Unknown") {
+                    participantsSet.add(senderName);
+                }
+
+                const hasAttachments = getXmlNodeText(item, "HasAttachments") === "true";
+
+                // Get body content
+                let bodySnippet = getXmlNodeText(item, "Body");
+                if (bodySnippet && bodySnippet.length > 500) {
+                    bodySnippet = bodySnippet.substring(0, 500) + "...";
+                }
+
+                if (!mainSubject && subject) {
+                    mainSubject = subject;
+                }
+
+                // Map to REST API compatibility structure
+                messages.push({
+                    Subject: subject || "No Subject",
+                    From: {
+                        EmailAddress: {
+                            Name: senderName,
+                            Address: senderEmail
+                        }
+                    },
+                    ToRecipients: [],
+                    ReceivedDateTime: dateTimeReceived || new Date().toISOString(),
+                    BodyPreview: bodySnippet || "",
+                    HasAttachments: hasAttachments
+                });
+            }
+        }
+
+        // Sort chronological
+        messages.sort((a, b) => new Date(a.ReceivedDateTime) - new Date(b.ReceivedDateTime));
+
+        rawConversationData = {
+            conversationId: Office.context.mailbox.item.conversationId,
+            subject: mainSubject || Office.context.mailbox.item.subject || "Subject Unavailable",
+            totalMessages: messages.length,
+            participants: Array.from(participantsSet),
+            timeframe: getFormattedTimeframe(messages.map(m => m.ReceivedDateTime)),
+            messages: messages
+        };
+
+        // Formats the XML nicely for display in the tab
+        rawJsonResponse = JSON.stringify(rawConversationData, null, 2);
+
+        const progressBar = document.getElementById("progress-bar");
+        progressBar.style.width = "100%";
+
+        renderDashboard(rawConversationData, xmlString);
+    } catch (e) {
+        console.warn("Parsing XML response failed: " + e.message + ". Falling back to REST API.");
+        fetchConversationViaREST();
+    }
+}
+
+// Utility to get XML text content handling namespaces
+function getXmlNodeText(parentNode, localName) {
+    const nodes = parentNode.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", localName);
+    if (nodes.length > 0) return nodes[0].textContent;
+    
+    const prefNodes = parentNode.getElementsByTagName("t:" + localName);
+    if (prefNodes.length > 0) return prefNodes[0].textContent;
+    
+    const plainNodes = parentNode.getElementsByTagName(localName);
+    if (plainNodes.length > 0) return plainNodes[0].textContent;
+    
+    return "";
+}
+
+// Utility to get XML attributes handling namespaces
+function getXmlNodeValue(parentNode, localName, attributeName) {
+    const nodes = parentNode.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", localName);
+    if (nodes.length > 0) return nodes[0].getAttribute(attributeName);
+    
+    const prefNodes = parentNode.getElementsByTagName("t:" + localName);
+    if (prefNodes.length > 0) return prefNodes[0].getAttribute(attributeName);
+    
+    const plainNodes = parentNode.getElementsByTagName(localName);
+    if (plainNodes.length > 0) return plainNodes[0].getAttribute(attributeName);
+    
+    return "";
 }
