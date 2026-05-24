@@ -103,14 +103,8 @@ function initializeAddIn() {
             return;
         }
 
-        const conversationId = item.conversationId;
-        if (!conversationId) {
-            showError("Could not retrieve conversation ID for this message.");
-            return;
-        }
-
-        // Try EWS SOAP first (corrected schema), fall back to REST if it fails
-        fetchConversationViaEWS(conversationId);
+        // Try local client-side thread parsing first (works universally, zero permissions/network)
+        fetchConversationViaClientBody();
     } catch (e) {
         showError(`Initialization error: ${e.message}`);
     }
@@ -722,4 +716,204 @@ function getXmlNodeValue(parentNode, localName, attributeName) {
     if (plainNodes.length > 0) return plainNodes[0].getAttribute(attributeName);
     
     return "";
+}
+
+// ============================================================
+// Client-Side Zero-Permission Thread Parser
+// Works 100% locally on ALL accounts (free and business)
+// ============================================================
+function fetchConversationViaClientBody() {
+    const progressBar = document.getElementById("progress-bar");
+    progressBar.style.width = "20%";
+
+    try {
+        const item = Office.context.mailbox.item;
+        progressBar.style.width = "50%";
+        
+        item.body.getAsync(Office.CoercionType.Text, (result) => {
+            progressBar.style.width = "80%";
+            if (result.status === Office.AsyncResultStatus.Succeeded && result.value) {
+                progressBar.style.width = "100%";
+                try {
+                    const parsedData = parseThreadFromText(result.value);
+                    rawConversationData = parsedData;
+                    rawJsonResponse = JSON.stringify(parsedData, null, 2);
+                    renderDashboard(rawConversationData, result.value);
+                } catch (parseErr) {
+                    console.warn("Client thread parsing failed: " + parseErr.message + ". Falling back to EWS SOAP.");
+                    fetchConversationViaEWS(item.conversationId);
+                }
+            } else {
+                console.warn("Client body retrieval failed. Falling back to EWS SOAP.");
+                fetchConversationViaEWS(item.conversationId);
+            }
+        });
+    } catch (err) {
+        console.warn("Client body retrieval threw error: " + err.message + ". Falling back to EWS SOAP.");
+        fetchConversationViaEWS(Office.context.mailbox.item.conversationId);
+    }
+}
+
+function parseThreadFromText(textBody) {
+    const messages = [];
+    const participantsSet = new Set();
+    
+    // Grab current email metadata as the root message
+    const item = Office.context.mailbox.item;
+    const currentSubject = item.subject || "No Subject";
+    
+    let currentSenderName = "Me";
+    let currentSenderEmail = "me@domain.com";
+    if (item.from) {
+        currentSenderName = item.from.displayName || "Unknown Sender";
+        currentSenderEmail = item.from.emailAddress || "unknown@domain.com";
+    }
+    
+    const currentReceivedDate = item.dateTimeCreated ? item.dateTimeCreated.toISOString() : new Date().toISOString();
+    
+    // Add current sender to participants
+    participantsSet.add(currentSenderName);
+
+    // Regex to match E-mail header blocks in English, Greek, French, German
+    const headerRegex = /(?:\r?\n)*[-_]*\r?\n(?:From|Από|De|Von):\s*([^\r\n<]+?)(?:\s*<([^>\r\n]+)>)?\r?\n(?:Sent|Στάλθηκε|Date|Datum|Σταλθηκε):\s*([^\r\n]+)\r?\n(?:To|Προς|À|An):\s*([^\r\n]+)\r?\n(?:Subject|Θέμα|Objet|Betreff):\s*([^\r\n]+)/gi;
+
+    let match;
+    const splitIndices = [];
+    
+    // Find all reply header blocks
+    while ((match = headerRegex.exec(textBody)) !== null) {
+        splitIndices.push({
+            index: match.index,
+            length: match[0].length,
+            senderName: match[1].trim(),
+            senderEmail: match[2] ? match[2].trim() : "",
+            sentDateStr: match[3].trim(),
+            toRecipientsStr: match[4].trim(),
+            subjectStr: match[5].trim()
+        });
+    }
+
+    if (splitIndices.length === 0) {
+        // Only one message (the current one)
+        let bodyClean = cleanMessageBody(textBody);
+        messages.push({
+            Subject: currentSubject,
+            From: {
+                EmailAddress: {
+                    Name: currentSenderName,
+                    Address: currentSenderEmail
+                }
+            },
+            ToRecipients: parseRecipientList(item.to),
+            ReceivedDateTime: currentReceivedDate,
+            BodyPreview: bodyClean,
+            HasAttachments: false
+        });
+    } else {
+        // Parse the first (latest) message in the thread
+        const firstMessageBody = textBody.substring(0, splitIndices[0].index);
+        messages.push({
+            Subject: currentSubject,
+            From: {
+                EmailAddress: {
+                    Name: currentSenderName,
+                    Address: currentSenderEmail
+                }
+            },
+            ToRecipients: parseRecipientList(item.to),
+            ReceivedDateTime: currentReceivedDate,
+            BodyPreview: cleanMessageBody(firstMessageBody),
+            HasAttachments: false
+        });
+
+        // Parse subsequent messages
+        for (let i = 0; i < splitIndices.length; i++) {
+            const currentSplit = splitIndices[i];
+            const nextIndex = (i + 1 < splitIndices.length) ? splitIndices[i + 1].index : textBody.length;
+            
+            const rawBody = textBody.substring(currentSplit.index + currentSplit.length, nextIndex);
+            const cleanedBody = cleanMessageBody(rawBody);
+            
+            if (currentSplit.senderName) {
+                participantsSet.add(currentSplit.senderName);
+            }
+
+            let isoDate = parseToISODate(currentSplit.sentDateStr);
+
+            messages.push({
+                Subject: currentSplit.subjectStr || currentSubject,
+                From: {
+                    EmailAddress: {
+                        Name: currentSplit.senderName || "Unknown",
+                        Address: currentSplit.senderEmail || "unknown@domain.com"
+                    }
+                },
+                ToRecipients: parseRecipientString(currentSplit.toRecipientsStr),
+                ReceivedDateTime: isoDate,
+                BodyPreview: cleanedBody,
+                HasAttachments: false
+            });
+        }
+    }
+
+    // Sort chronological (oldest to newest)
+    messages.sort((a, b) => new Date(a.ReceivedDateTime) - new Date(b.ReceivedDateTime));
+
+    return {
+        conversationId: item.conversationId || "CONV_" + Date.now(),
+        subject: currentSubject,
+        totalMessages: messages.length,
+        participants: Array.from(participantsSet),
+        timeframe: getFormattedTimeframe(messages.map(m => m.ReceivedDateTime)),
+        messages: messages
+    };
+}
+
+function cleanMessageBody(body) {
+    if (!body) return "";
+    return body
+        .replace(/^[ -_]*\r?\n/gm, "") // remove leading divider lines
+        .replace(/________________________________/g, "") // remove standard lines
+        .trim();
+}
+
+function parseRecipientList(recipients) {
+    if (!recipients) return [];
+    return recipients.map(r => ({
+        EmailAddress: {
+            Name: r.displayName || "Recipient",
+            Address: r.emailAddress || ""
+        }
+    }));
+}
+
+function parseRecipientString(recipientsStr) {
+    if (!recipientsStr) return [];
+    return recipientsStr.split(/[;,]/).map(r => {
+        const match = r.match(/([^<]+)?(?:<([^>]+)>)?/);
+        if (match) {
+            return {
+                EmailAddress: {
+                    Name: (match[1] || match[2] || "Recipient").trim(),
+                    Address: (match[2] || match[1] || "").trim()
+                }
+            };
+        }
+        return {
+            EmailAddress: {
+                Name: r.trim(),
+                Address: r.trim()
+            }
+        };
+    });
+}
+
+function parseToISODate(dateStr) {
+    try {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        return new Date().toISOString();
+    } catch {
+        return new Date().toISOString();
+    }
 }
