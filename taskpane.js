@@ -596,6 +596,31 @@ function fetchConversationViaEWS(restConversationId) {
     }
 }
 
+// Robust XML element selector that handles various namespace formats and browser variations
+function getXmlNodeList(parentNode, localName) {
+    if (!parentNode) return [];
+    
+    // 1. Try NS-aware query (standard for EWS)
+    let nodes = parentNode.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", localName);
+    if (nodes && nodes.length > 0) return nodes;
+    
+    // 2. Try with t: prefix explicitly
+    nodes = parentNode.getElementsByTagName("t:" + localName);
+    if (nodes && nodes.length > 0) return nodes;
+    
+    // 3. Try plain local name
+    nodes = parentNode.getElementsByTagName(localName);
+    if (nodes && nodes.length > 0) return nodes;
+    
+    // 4. Try case-insensitive query or querySelector (fallback)
+    try {
+        nodes = parentNode.querySelectorAll(localName);
+        if (nodes && nodes.length > 0) return nodes;
+    } catch (e) {}
+    
+    return [];
+}
+
 function parseEwsSoapResponse(xmlString) {
     try {
         const parser = new DOMParser();
@@ -612,10 +637,8 @@ function parseEwsSoapResponse(xmlString) {
             return;
         }
 
-        // Get conversation nodes
-        const conversationNodes = xmlDoc.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", "ConversationNode") ||
-                                  xmlDoc.getElementsByTagName("t:ConversationNode") ||
-                                  xmlDoc.getElementsByTagName("ConversationNode");
+        // Get conversation nodes using our robust namespace helper
+        const conversationNodes = getXmlNodeList(xmlDoc, "ConversationNode");
 
         if (conversationNodes.length === 0) {
             console.warn("No conversation history node structure found in EWS response. Falling back to client-side body parser.");
@@ -630,9 +653,7 @@ function parseEwsSoapResponse(xmlString) {
         // Iterate through EWS nodes
         for (let i = 0; i < conversationNodes.length; i++) {
             const node = conversationNodes[i];
-            const itemNodes = node.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", "Message") ||
-                              node.getElementsByTagName("t:Message") ||
-                              node.getElementsByTagName("Message");
+            const itemNodes = getXmlNodeList(node, "Message");
 
             for (let j = 0; j < itemNodes.length; j++) {
                 const item = itemNodes[j];
@@ -644,9 +665,7 @@ function parseEwsSoapResponse(xmlString) {
                 // Get Sender Info
                 let senderName = "Unknown";
                 let senderEmail = "unknown@domain.com";
-                const senderNode = item.getElementsByTagNameNS("http://schemas.microsoft.com/exchange/services/2006/types", "Sender")[0] ||
-                                   item.getElementsByTagName("t:Sender")[0] ||
-                                   item.getElementsByTagName("Sender")[0];
+                const senderNode = getXmlNodeList(item, "Sender")[0];
                 if (senderNode) {
                     senderName = getXmlNodeText(senderNode, "Name");
                     senderEmail = getXmlNodeText(senderNode, "EmailAddress");
@@ -742,31 +761,117 @@ function getXmlNodeValue(parentNode, localName, attributeName) {
 // Client-Side Zero-Permission Thread Parser
 // Works 100% locally on ALL accounts (free and business)
 // ============================================================
+// Converts an HTML document or snippet to plain text, preserving structure and header layouts for email parsing
+function convertHtmlToText(htmlString) {
+    if (!htmlString) return "";
+    
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlString, "text/html");
+        
+        let text = "";
+        
+        function traverse(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                // Ensure text is preserved, collapsing multiple spaces but keeping inline formatting
+                text += node.textContent;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                const tagName = node.tagName.toLowerCase();
+                
+                // Add spacing/linebreaks based on element blocks
+                if (tagName === "br") {
+                    text += "\n";
+                } else if (tagName === "p" || tagName === "div" || tagName === "tr" || tagName === "h1" || tagName === "h2" || tagName === "h3" || tagName === "h4" || tagName === "h5" || tagName === "h6") {
+                    text += "\n";
+                    for (let child of node.childNodes) {
+                        traverse(child);
+                    }
+                    text += "\n";
+                } else if (tagName === "hr") {
+                    text += "\n________________________________\n";
+                } else if (tagName === "td" || tagName === "th") {
+                    for (let child of node.childNodes) {
+                        traverse(child);
+                    }
+                    text += " "; // space out columns
+                } else {
+                    for (let child of node.childNodes) {
+                        traverse(child);
+                    }
+                }
+            }
+        }
+        
+        traverse(doc.body || doc);
+        
+        // Post-processing: clean up non-breaking spaces and excessive vertical whitespace
+        return text
+            .replace(/\xa0/g, " ") // Convert &nbsp; to standard spaces
+            .replace(/\u2007/g, " ")
+            .replace(/\u202f/g, " ")
+            .replace(/\r/g, "") // Normalize CR
+            .replace(/\n{3,}/g, "\n\n") // Collapse multiple blank lines to at most two
+            .trim();
+    } catch (e) {
+        console.warn("convertHtmlToText failed, returning raw string stripped of tags:", e);
+        return htmlString.replace(/<[^>]+>/g, "").trim();
+    }
+}
+
 function fetchConversationViaClientBody() {
     const progressBar = document.getElementById("progress-bar");
     progressBar.style.width = "20%";
 
     try {
         const item = Office.context.mailbox.item;
-        progressBar.style.width = "50%";
+        progressBar.style.width = "40%";
         
-        item.body.getAsync(Office.CoercionType.Text, (result) => {
-            progressBar.style.width = "80%";
+        // Layer 1: Fetch as HTML to get the full conversation thread with original layout
+        item.body.getAsync(Office.CoercionType.Html, (result) => {
             if (result.status === Office.AsyncResultStatus.Succeeded && result.value) {
-                progressBar.style.width = "100%";
+                progressBar.style.width = "80%";
                 try {
-                    const parsedData = parseThreadFromText(result.value);
-                    rawConversationData = parsedData;
-                    rawJsonResponse = JSON.stringify(parsedData, null, 2);
-                    renderDashboard(rawConversationData, result.value);
+                    const textFromHtml = convertHtmlToText(result.value);
+                    const parsedData = parseThreadFromText(textFromHtml);
+                    
+                    // If we successfully found replies, render!
+                    if (parsedData.messages.length > 1) {
+                        progressBar.style.width = "100%";
+                        rawConversationData = parsedData;
+                        rawJsonResponse = JSON.stringify(parsedData, null, 2);
+                        renderDashboard(rawConversationData, result.value);
+                        console.log("Successfully extracted " + parsedData.messages.length + " conversation items from HTML body.");
+                        return;
+                    }
+                    console.log("Only 1 message found in HTML body parsing. Trying plain text body fallback...");
                 } catch (parseErr) {
-                    console.warn("Client thread parsing failed: " + parseErr.message + ". Falling back to REST API.");
-                    fetchConversationViaREST();
+                    console.warn("HTML body parsing failed: " + parseErr.message + ". Trying plain text fallback...");
                 }
             } else {
-                console.warn("Client body retrieval failed. Falling back to REST API.");
-                fetchConversationViaREST();
+                console.warn("HTML body retrieval failed or was empty. Trying plain text fallback...");
             }
+            
+            // Layer 2: Plain Text Fallback (in case client is plain-text only or HTML extraction found only 1 message)
+            progressBar.style.width = "60%";
+            item.body.getAsync(Office.CoercionType.Text, (txtResult) => {
+                progressBar.style.width = "80%";
+                if (txtResult.status === Office.AsyncResultStatus.Succeeded && txtResult.value) {
+                    progressBar.style.width = "100%";
+                    try {
+                        const parsedData = parseThreadFromText(txtResult.value);
+                        rawConversationData = parsedData;
+                        rawJsonResponse = JSON.stringify(parsedData, null, 2);
+                        renderDashboard(rawConversationData, txtResult.value);
+                        console.log("Extracted " + parsedData.messages.length + " conversation items from plain text body.");
+                    } catch (parseErr) {
+                        console.warn("Plain text body parsing failed: " + parseErr.message + ". Falling back to REST API...");
+                        fetchConversationViaREST();
+                    }
+                } else {
+                    console.warn("Plain text body retrieval failed. Falling back to REST API...");
+                    fetchConversationViaREST();
+                }
+            });
         });
     } catch (err) {
         console.warn("Client body retrieval threw error: " + err.message + ". Falling back to REST API.");
@@ -877,21 +982,24 @@ function findHeaderBlocks(text) {
     const lines = text.split(/\r?\n/);
     const blocks = [];
     
-    // Multilingual regular expressions for email header tags (multi-line blocks)
-    const fromRegex = /^(?:From|Από|De|Von|Da|Απο):\s*(.+)$/i;
-    const sentRegex = /^(?:Sent|Στάλθηκε|Date|Datum|Σταλθηκε|Envoyé|Gesendet|Enviado|Inviato):\s*(.+)$/i;
-    const toRegex = /^(?:To|Προς|À|An|Para|A):\s*(.+)$/i;
-    const subjectRegex = /^(?:Subject|Θέμα|Objet|Betreff|Asunto|Oggetto|Θεμα):\s*(.+)$/i;
+    // Multilingual regular expressions for email header tags (multi-line blocks) - matching optional markdown asterisks and flexible spacing
+    const fromRegex = /^\*?\*?(?:From|Από|De|Von|Da|Απο)\*?\*?\s*:\s*(.+)$/i;
+    const sentRegex = /^\*?\*?(?:Sent|Στάλθηκε|Date|Datum|Σταλθηκε|Envoyé|Gesendet|Enviado|Inviato|Ημερομηνία|Ημερομηνια)\*?\*?\s*:\s*(.+)$/i;
+    const toRegex = /^\*?\*?(?:To|Προς|À|An|Para|A)\*?\*?\s*:\s*(.+)$/i;
+    const subjectRegex = /^\*?\*?(?:Subject|Θέμα|Objet|Betreff|Asunto|Oggetto|Θεμα)\*?\*?\s*:\s*(.+)$/i;
 
     // Multilingual regex for single-line separators (e.g., "On [Date], [Name] wrote:" or Greek equivalent)
     const singleLineRegex = /^(?:On|Στις|Le|Am|El|Da)\s+(.+?)\s+(?:wrote|έγραψε|a écrit|schrieb|escribió|ha scritto|ο χρήστης|ο\/η|user)(?:\s+(?:χρήστης|user))?\s+(.+?)(?:\s*(?:wrote|έγραψε|a écrit|schrieb|escribió|ha scritto))?\s*:?\s*$/i;
+
+    // Simple single-line wrote regex: "Name <email> wrote:" or "ο/η Name έγραψε:"
+    const simpleWroteRegex = /^(?:\*?\*?)(.+?)(?:\*?\*?)\s+(?:wrote|έγραψε|a écrit|schrieb|escribió|ha scritto)\s*:\s*$/i;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         // Clean leading quote markers (> or spaces) commonly found in quoted email replies
         const lineClean = line.replace(/^[>\s]+/, "").trim();
         
-        // 1. Check for single-line separator first
+        // 1. Check for standard single-line separator first
         const singleLineMatch = lineClean.match(singleLineRegex);
         if (singleLineMatch) {
             let sentStr = singleLineMatch[1].trim();
@@ -918,6 +1026,37 @@ function findHeaderBlocks(text) {
                 senderName: senderName || senderStr,
                 senderEmail: senderEmail,
                 sentDateStr: sentStr,
+                toRecipientsStr: "",
+                subjectStr: ""
+            });
+            
+            continue;
+        }
+
+        // 2. Check for simple wrote separator: "Name <email> wrote:"
+        const simpleWroteMatch = lineClean.match(simpleWroteRegex);
+        if (simpleWroteMatch) {
+            let senderStr = simpleWroteMatch[1].trim();
+            let senderName = senderStr;
+            let senderEmail = "";
+            const emailMatch = senderStr.match(/([^<]+)?(?:<([^>]+)>)?/);
+            if (emailMatch) {
+                senderName = (emailMatch[1] || "").trim();
+                senderEmail = (emailMatch[2] || "").trim();
+            }
+            
+            let charIndex = 0;
+            for (let k = 0; k < i; k++) {
+                charIndex += lines[k].length + 1;
+            }
+            
+            blocks.push({
+                lineIndex: i,
+                charIndex: charIndex,
+                length: lines[i].length + 1,
+                senderName: senderName || senderStr,
+                senderEmail: senderEmail,
+                sentDateStr: new Date().toISOString(), // Fallback to current date
                 toRecipientsStr: "",
                 subjectStr: ""
             });
