@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<OfficeApp xmlns="http://schemas.microsoft.com/office/appmanifest/1.1"
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
            xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
            xmlns:mailapp="http://schemas.microsoft.com/office/mailappversionoverrides"
