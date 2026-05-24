@@ -46,6 +46,26 @@ Office.onReady((info) => {
     if (info.host === Office.HostType.Outlook) {
         statusBadge.textContent = "Outlook Host";
         statusBadge.className = "status-badge connected";
+        
+        // Register event handler to listen for active email selection changes (enables auto-refresh as user navigates)
+        try {
+            if (Office.context.mailbox && Office.context.mailbox.addHandlerAsync) {
+                Office.context.mailbox.addHandlerAsync(
+                    Office.EventType.ItemChanged,
+                    onItemChanged,
+                    (asyncResult) => {
+                        if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+                            console.log("Successfully registered ItemChanged event handler.");
+                        } else {
+                            console.warn("Failed to register ItemChanged event handler:", asyncResult.error.message);
+                        }
+                    }
+                );
+            }
+        } catch (e) {
+            console.warn("Error adding ItemChanged event handler:", e.message);
+        }
+        
         initializeAddIn();
     } else {
         statusBadge.textContent = "Preview Mode";
@@ -53,6 +73,13 @@ Office.onReady((info) => {
         loadMockData();
     }
 });
+
+// Event callback when the user navigates to a different email
+function onItemChanged() {
+    console.log("Selected email changed. Auto-refreshing add-in panel...");
+    initializeAddIn();
+}
+
 
 // Setup Event Listeners
 document.addEventListener("DOMContentLoaded", () => {
