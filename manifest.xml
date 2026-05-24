@@ -44,9 +44,9 @@
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
     <Description resid="AppDescription" />
     <Requirements>
-      <Sets>
-        <Set Name="Mailbox" MinVersion="1.5" />
-      </Sets>
+      <bt:Sets DefaultMinVersion="1.5">
+        <bt:Set Name="Mailbox" MinVersion="1.5" />
+      </bt:Sets>
     </Requirements>
     <Hosts>
       <Host xsi:type="MailHost">
