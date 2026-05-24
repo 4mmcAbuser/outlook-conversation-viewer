@@ -126,6 +126,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const tabContents = document.querySelectorAll(".tab-content");
             tabContents.forEach(content => content.classList.remove("active"));
             document.getElementById(`tab-${targetTab}`).classList.add("active");
+            
+            if (targetTab === "source-code") {
+                loadSourceCode();
+            }
         });
     });
 
@@ -135,6 +139,10 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btn-copy-xml").addEventListener("click", copyXmlToClipboard);
     document.getElementById("btn-collapse-all").addEventListener("click", () => renderJsonView(rawConversationData, false));
     document.getElementById("btn-expand-all").addEventListener("click", () => renderJsonView(rawConversationData, true));
+    
+    // Source code viewers
+    document.getElementById("source-file-selector").addEventListener("change", loadSourceCode);
+    document.getElementById("btn-copy-source").addEventListener("click", copySourceCodeToClipboard);
 });
 
 // Primary Add-in Entry Point inside Outlook
@@ -618,4 +626,38 @@ function loadMockData() {
     rawConversationData = mockConversation;
     rawXmlResponse = mockXmlResponse;
     renderDashboard(rawConversationData, rawXmlResponse);
+}
+
+// Load and display source code
+function loadSourceCode() {
+    const file = document.getElementById("source-file-selector").value;
+    const output = document.getElementById("source-output");
+    output.textContent = "Loading " + file + "...";
+    
+    fetch("./" + file)
+        .then(response => {
+            if (!response.ok) throw new Error("Could not fetch file: " + response.statusText);
+            return response.text();
+        })
+        .then(text => {
+            output.textContent = text;
+        })
+        .catch(err => {
+            output.textContent = "Error loading " + file + ": " + err.message + 
+                               "\n\n(If you are running in sideloaded mode, ensure that the files are served over HTTPS from your secure local or GitHub Pages server).";
+        });
+}
+
+function copySourceCodeToClipboard() {
+    const output = document.getElementById("source-output");
+    const code = output.textContent;
+    if (code.startsWith("Loading ") || code.startsWith("Error loading ")) return;
+    
+    navigator.clipboard.writeText(code).then(() => {
+        const btn = document.getElementById("btn-copy-source");
+        btn.textContent = "Copied ✓";
+        setTimeout(() => {
+            btn.textContent = "Copy Code";
+        }, 2200);
+    });
 }

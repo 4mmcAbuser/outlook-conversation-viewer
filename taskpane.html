@@ -73,6 +73,7 @@
                     <button class="tab-btn active" data-tab="timeline">Timeline</button>
                     <button class="tab-btn" data-tab="json-viewer">JSON Viewer</button>
                     <button class="tab-btn" data-tab="raw-xml">Raw XML</button>
+                    <button class="tab-btn" data-tab="source-code">Source Code</button>
                 </div>
 
                 <!-- Tab Content Area -->
@@ -113,6 +114,26 @@
                         </div>
                         <div class="json-code-container">
                             <pre class="xml-viewer" id="xml-output"></pre>
+                        </div>
+                    </div>
+
+                    <!-- Tab 4: Add-in Source Code -->
+                    <div class="tab-content" id="tab-source-code">
+                        <div class="action-bar">
+                            <div class="controls-left">
+                                <select id="source-file-selector" class="dropdown">
+                                    <option value="manifest.xml">manifest.xml</option>
+                                    <option value="taskpane.js">taskpane.js</option>
+                                    <option value="taskpane.css">taskpane.css</option>
+                                    <option value="taskpane.html">taskpane.html</option>
+                                </select>
+                            </div>
+                            <div class="controls-right">
+                                <button class="btn btn-secondary" id="btn-copy-source">Copy Code</button>
+                            </div>
+                        </div>
+                        <div class="json-code-container">
+                            <pre class="xml-viewer" id="source-output">Loading source file...</pre>
                         </div>
                     </div>
                 </div>
