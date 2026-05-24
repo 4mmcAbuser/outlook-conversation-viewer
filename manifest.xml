@@ -1,39 +1,98 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
-           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-           xsi:type="MailApp">
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp 
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" 
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" 
+  xsi:type="MailApp">
+
   <Id>8d2f1f50-32df-4277-bc60-0a370e5b565d</Id>
-  <Version>1.0.0.0</Version>
-  <ProviderName>Conversation Viewer</ProviderName>
+  <Version>1.0.0.1</Version>
+  <ProviderName>Conversation Viewer Team</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Conversation JSON Viewer" />
-  <Description DefaultValue="View the complete email conversation thread as interactive JSON." />
-  <IconUrl DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/assets/icon-64.png" />
-  <HighResolutionIconUrl DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/assets/icon-64.png" />
-  <SupportUrl DefaultValue="https://github.com/4mmcAbuser/outlook-conversation-viewer" />
-
-  <Hosts>
-    <Host Name="Mailbox" />
-  </Hosts>
-
+  <Description DefaultValue="View entire email conversation thread as interactive JSON." />
+  
+  <IconUrl DefaultValue="https://raw.githubusercontent.com/4mmcAbuser/outlook-conversation-viewer/main/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://raw.githubusercontent.com/4mmcAbuser/outlook-conversation-viewer/main/assets/icon-80.png"/>
+  
   <Requirements>
     <Sets>
-      <Set Name="Mailbox" MinVersion="1.1" />
+      <Set Name="Mailbox" MinVersion="1.3" />
     </Sets>
   </Requirements>
-
+  
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/taskpane.html" />
+        <SourceLocation DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/taskpane.html"/>
         <RequestedHeight>450</RequestedHeight>
       </DesktopSettings>
     </Form>
   </FormSettings>
-
+  
   <Permissions>ReadWriteMailbox</Permissions>
-
-  <Rule xsi:type="RuleCollection" Mode="Or">
-    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
-  </Rule>
+  <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+  
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.3">
+        <bt:Set Name="Mailbox" />
+      </bt:Sets>
+    </Requirements>
+    
+    <Hosts>
+      <Host xsi:type="MailHost">
+        <DesktopFormFactor>
+          
+          <FunctionFile resid="Commands.Url" />
+          
+          <ExtensionPoint xsi:type="MessageReadCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="msgReadGroup">
+                <Label resid="groupLabel" />
+                <Control xsi:type="Button" id="msgReadOpenPaneButton">
+                  <Label resid="paneReadButtonLabel" />
+                  <Supertip>
+                    <Title resid="paneReadSuperTipTitle" />
+                    <Description resid="paneReadSuperTipDescription" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16" />
+                    <bt:Image size="32" resid="icon32" />
+                    <bt:Image size="80" resid="icon80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="messageReadTaskPaneUrl" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+          
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    
+    <Resources>
+      <bt:Images>
+        <bt:Image id="icon16" DefaultValue="https://raw.githubusercontent.com/4mmcAbuser/outlook-conversation-viewer/main/assets/icon-16.png" />
+        <bt:Image id="icon32" DefaultValue="https://raw.githubusercontent.com/4mmcAbuser/outlook-conversation-viewer/main/assets/icon-32.png" />
+        <bt:Image id="icon80" DefaultValue="https://raw.githubusercontent.com/4mmcAbuser/outlook-conversation-viewer/main/assets/icon-80.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="messageReadTaskPaneUrl" DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/taskpane.html"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://4mmcabuser.github.io/outlook-conversation-viewer/commands.html"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="groupLabel" DefaultValue="JSON Tools" />
+        <bt:String id="paneReadButtonLabel" DefaultValue="Conversation JSON" />
+        <bt:String id="paneReadSuperTipTitle" DefaultValue="Conversation JSON Viewer" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="paneReadSuperTipDescription" DefaultValue="Reads the entire email conversation thread and displays it as interactive JSON." />
+      </bt:LongStrings>
+    </Resources>
+    
+  </VersionOverrides>
 </OfficeApp>
