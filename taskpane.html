@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversation JSON Viewer</title>
+    <!-- Google Fonts for premium design -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="taskpane.css">
+    <!-- Office.js CDN -->
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- Premium Header with dynamic background glow -->
+        <header class="app-header">
+            <div class="glow-container">
+                <div class="glow-spot blue-glow"></div>
+                <div class="glow-spot purple-glow"></div>
+            </div>
+            <div class="logo-area">
+                <span class="logo-icon">{ }</span>
+                <h1>Conversation Insights</h1>
+            </div>
+            <div class="status-badge" id="app-status">Initializing...</div>
+        </header>
+
+        <!-- Main Body -->
+        <main class="app-content">
+            <!-- Loading Indicator -->
+            <div class="loader-container" id="loader">
+                <div class="spinner"></div>
+                <p>Retrieving conversation from Exchange Server...</p>
+                <div class="loading-bar"><div class="loading-progress" id="progress-bar"></div></div>
+            </div>
+
+            <!-- Error Panel -->
+            <div class="error-container hidden" id="error-panel">
+                <span class="error-icon">⚠️</span>
+                <h2>Data Retrieval Error</h2>
+                <p id="error-message">Could not access Exchange Web Services.</p>
+                <button class="btn btn-secondary" onclick="initializeAddIn()">Retry</button>
+            </div>
+
+            <!-- Dashboard (when loaded) -->
+            <div class="dashboard-container hidden" id="dashboard">
+                <!-- Subject Widget -->
+                <div class="subject-card card">
+                    <span class="card-label">Conversation Subject</span>
+                    <h3 id="conv-subject">Loading Subject...</h3>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card card">
+                        <div class="stat-icon">✉️</div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="stat-emails">-</span>
+                            <span class="stat-lbl">Messages</span>
+                        </div>
+                    </div>
+                    <div class="stat-card card">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="stat-people">-</span>
+                            <span class="stat-lbl">Participants</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Controller -->
+                <div class="tab-controller">
+                    <button class="tab-btn active" data-tab="timeline">Timeline</button>
+                    <button class="tab-btn" data-tab="json-viewer">JSON Viewer</button>
+                    <button class="tab-btn" data-tab="raw-xml">Raw XML</button>
+                </div>
+
+                <!-- Tab Content Area -->
+                <div class="tab-content-wrapper">
+                    <!-- Tab 1: Timeline -->
+                    <div class="tab-content active" id="tab-timeline">
+                        <div class="timeline-scroll-container">
+                            <ul class="timeline" id="timeline-list">
+                                <!-- Populated dynamically by JS -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Interactive JSON Viewer -->
+                    <div class="tab-content" id="tab-json-viewer">
+                        <div class="action-bar">
+                            <div class="controls-left">
+                                <button class="btn-icon" id="btn-collapse-all" title="Collapse All">Collapse</button>
+                                <button class="btn-icon" id="btn-expand-all" title="Expand All">Expand</button>
+                            </div>
+                            <div class="controls-right">
+                                <button class="btn btn-primary" id="btn-copy-json">
+                                    <span class="btn-text">Copy JSON</span>
+                                </button>
+                                <button class="btn btn-secondary" id="btn-download-json">Download</button>
+                            </div>
+                        </div>
+                        <div class="json-code-container">
+                            <pre class="json-viewer" id="json-output"></pre>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3: Raw SOAP XML Response -->
+                    <div class="tab-content" id="tab-raw-xml">
+                        <div class="action-bar">
+                            <span class="bar-label">SOAP Response</span>
+                            <button class="btn btn-secondary" id="btn-copy-xml">Copy XML</button>
+                        </div>
+                        <div class="json-code-container">
+                            <pre class="xml-viewer" id="xml-output"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <p>Exchange Web Services SOAP Direct Integration</p>
+        </footer>
+    </div>
+    
+    <script src="taskpane.js"></script>
+</body>
+</html>
