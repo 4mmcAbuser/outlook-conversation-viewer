@@ -774,24 +774,8 @@ function parseThreadFromText(textBody) {
     // Add current sender to participants
     participantsSet.add(currentSenderName);
 
-    // Regex to match E-mail header blocks in English, Greek, French, German
-    const headerRegex = /(?:\r?\n)*[-_]*\r?\n(?:From|Από|De|Von):\s*([^\r\n<]+?)(?:\s*<([^>\r\n]+)>)?\r?\n(?:Sent|Στάλθηκε|Date|Datum|Σταλθηκε):\s*([^\r\n]+)\r?\n(?:To|Προς|À|An):\s*([^\r\n]+)\r?\n(?:Subject|Θέμα|Objet|Betreff):\s*([^\r\n]+)/gi;
-
-    let match;
-    const splitIndices = [];
-    
-    // Find all reply header blocks
-    while ((match = headerRegex.exec(textBody)) !== null) {
-        splitIndices.push({
-            index: match.index,
-            length: match[0].length,
-            senderName: match[1].trim(),
-            senderEmail: match[2] ? match[2].trim() : "",
-            sentDateStr: match[3].trim(),
-            toRecipientsStr: match[4].trim(),
-            subjectStr: match[5].trim()
-        });
-    }
+    // Use our new highly-robust header block finder!
+    const splitIndices = findHeaderBlocks(textBody);
 
     if (splitIndices.length === 0) {
         // Only one message (the current one)
@@ -811,7 +795,7 @@ function parseThreadFromText(textBody) {
         });
     } else {
         // Parse the first (latest) message in the thread
-        const firstMessageBody = textBody.substring(0, splitIndices[0].index);
+        const firstMessageBody = textBody.substring(0, splitIndices[0].charIndex);
         messages.push({
             Subject: currentSubject,
             From: {
@@ -829,9 +813,9 @@ function parseThreadFromText(textBody) {
         // Parse subsequent messages
         for (let i = 0; i < splitIndices.length; i++) {
             const currentSplit = splitIndices[i];
-            const nextIndex = (i + 1 < splitIndices.length) ? splitIndices[i + 1].index : textBody.length;
+            const nextIndex = (i + 1 < splitIndices.length) ? splitIndices[i + 1].charIndex : textBody.length;
             
-            const rawBody = textBody.substring(currentSplit.index + currentSplit.length, nextIndex);
+            const rawBody = textBody.substring(currentSplit.charIndex + currentSplit.length, nextIndex);
             const cleanedBody = cleanMessageBody(rawBody);
             
             if (currentSplit.senderName) {
@@ -867,6 +851,82 @@ function parseThreadFromText(textBody) {
         timeframe: getFormattedTimeframe(messages.map(m => m.ReceivedDateTime)),
         messages: messages
     };
+}
+
+function findHeaderBlocks(text) {
+    const lines = text.split(/\r?\n/);
+    const blocks = [];
+    
+    // Multilingual regular expressions for email header tags
+    const fromRegex = /^(?:From|Από|De|Von|Da|Απο):\s*(.+)$/i;
+    const sentRegex = /^(?:Sent|Στάλθηκε|Date|Datum|Σταλθηκε|Envoyé|Gesendet|Enviado|Inviato):\s*(.+)$/i;
+    const toRegex = /^(?:To|Προς|À|An|Para|A):\s*(.+)$/i;
+    const subjectRegex = /^(?:Subject|Θέμα|Objet|Betreff|Asunto|Oggetto|Θεμα):\s*(.+)$/i;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const fromMatch = line.match(fromRegex);
+        
+        if (fromMatch) {
+            // We found a potential "From" line. Look at the next 6 lines to verify Sent, To, or Subject
+            let sentStr = "";
+            let toStr = "";
+            let subjectStr = "";
+            let headerLinesCount = 1;
+            
+            for (let j = 1; j <= 6; j++) {
+                if (i + j >= lines.length) break;
+                const nextLine = lines[i + j].trim();
+                
+                if (nextLine.match(sentRegex)) {
+                    sentStr = nextLine.match(sentRegex)[1];
+                    headerLinesCount = Math.max(headerLinesCount, j + 1);
+                } else if (nextLine.match(toRegex)) {
+                    toStr = nextLine.match(toRegex)[1];
+                    headerLinesCount = Math.max(headerLinesCount, j + 1);
+                } else if (nextLine.match(subjectRegex)) {
+                    subjectStr = nextLine.match(subjectRegex)[1];
+                    headerLinesCount = Math.max(headerLinesCount, j + 1);
+                }
+            }
+            
+            // Confirmed header block if From is accompanied by at least one other standard email header tag
+            if (sentStr || toStr || subjectStr) {
+                let charIndex = 0;
+                for (let k = 0; k < i; k++) {
+                    charIndex += lines[k].length + 1; // +1 for the newline character
+                }
+                
+                let blockLength = 0;
+                for (let k = 0; k < headerLinesCount; k++) {
+                    blockLength += lines[i + k].length + 1;
+                }
+                
+                let senderName = fromMatch[1];
+                let senderEmail = "";
+                const emailMatch = senderName.match(/([^<]+)?(?:<([^>]+)>)?/);
+                if (emailMatch) {
+                    senderName = (emailMatch[1] || "").trim();
+                    senderEmail = (emailMatch[2] || "").trim();
+                }
+                
+                blocks.push({
+                    lineIndex: i,
+                    charIndex: charIndex,
+                    length: blockLength,
+                    senderName: senderName || fromMatch[1].trim(),
+                    senderEmail: senderEmail,
+                    sentDateStr: sentStr.trim(),
+                    toRecipientsStr: toStr.trim(),
+                    subjectStr: subjectStr.trim()
+                });
+                
+                i += headerLinesCount - 1;
+            }
+        }
+    }
+    
+    return blocks;
 }
 
 function cleanMessageBody(body) {
